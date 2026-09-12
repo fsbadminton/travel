@@ -1,7 +1,157 @@
 package com.travel.media;
-import com.travel.auth.*; import com.travel.place.*; import java.awt.*; import java.awt.image.BufferedImage; import java.io.*; import java.nio.file.*; import java.util.*; import javax.imageio.ImageIO; import org.springframework.beans.factory.annotation.Value; import org.springframework.core.io.*; import org.springframework.http.*; import org.springframework.security.core.annotation.AuthenticationPrincipal; import org.springframework.transaction.annotation.Transactional; import org.springframework.util.StringUtils; import org.springframework.web.bind.annotation.*; import org.springframework.web.multipart.MultipartFile; import org.springframework.web.server.ResponseStatusException;
-@RestController @RequestMapping("/api/media") public class MediaController {static final long MAX=20L*1024*1024; final MediaRepository media;final PlaceRepository places;final UserRepository users;final Path root; public MediaController(MediaRepository m,PlaceRepository p,UserRepository u,@Value("${app.upload-dir:uploads}")String dir){media=m;places=p;users=u;root=Paths.get(dir).toAbsolutePath().normalize();}
- @PostMapping(consumes=MediaType.MULTIPART_FORM_DATA_VALUE) @ResponseStatus(HttpStatus.CREATED) @Transactional public MediaView upload(@AuthenticationPrincipal AccountPrincipal principal,@RequestParam MultipartFile file,@RequestParam Long placeId){if(file.isEmpty()||file.getSize()>MAX)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"图片不能为空且不能超过 20MB");if(!Objects.requireNonNullElse(file.getContentType(),"").startsWith("image/"))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"只支持图片文件");var user=users.findById(principal.id()).orElseThrow();var place=places.findByIdAndUserId(placeId,principal.id()).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND,"景点不存在"));if(media.countByPlaceIdAndUserId(placeId,principal.id())>=10)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"单个景点最多上传 10 张图片");String ext=extension(file.getOriginalFilename(),file.getContentType());Path dir=root.resolve(String.valueOf(principal.id())).resolve("place").resolve(String.valueOf(placeId));try{Files.createDirectories(dir);String base=UUID.randomUUID().toString();Path original=dir.resolve(base+ext),thumb=dir.resolve(base+"_thumb.jpg");file.transferTo(original);createThumb(original,thumb);Media m=new Media(user,place);m.originalPath=original.toString();m.thumbnailPath=thumb.toString();m.originalFilename=StringUtils.cleanPath(Objects.requireNonNullElse(file.getOriginalFilename(),base+ext));m.mimeType=file.getContentType();m.sizeBytes=file.getSize();m.sortOrder=(int)media.countByPlaceIdAndUserId(placeId,principal.id());return MediaView.from(media.save(m));}catch(IOException e){throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,"图片保存失败",e);}}
- @GetMapping("/{id}/original") public ResponseEntity<Resource> original(@PathVariable Long id,@AuthenticationPrincipal AccountPrincipal p){return file(id,p,false);} @GetMapping("/{id}/thumbnail") public ResponseEntity<Resource> thumb(@PathVariable Long id,@AuthenticationPrincipal AccountPrincipal p){return file(id,p,true);} private ResponseEntity<Resource> file(Long id,AccountPrincipal p,boolean thumbnail){Media m=media.findByIdAndUserId(id,p.id()).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND,"图片不存在"));Path path=Paths.get(thumbnail?m.thumbnailPath:m.originalPath);Resource r=new FileSystemResource(path);if(!r.exists())throw new ResponseStatusException(HttpStatus.NOT_FOUND,"图片文件不存在");return ResponseEntity.ok().contentType(MediaType.parseMediaType(thumbnail?"image/jpeg":m.mimeType)).body(r);}
- @DeleteMapping("/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) @Transactional public void delete(@PathVariable Long id,@AuthenticationPrincipal AccountPrincipal p){Media m=media.findByIdAndUserId(id,p.id()).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND,"图片不存在"));try{Files.deleteIfExists(Paths.get(m.originalPath));Files.deleteIfExists(Paths.get(m.thumbnailPath));}catch(IOException e){throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,"图片删除失败",e);}media.delete(m);}
- private static String extension(String name,String mime){String e=name==null?null:(name.lastIndexOf(".") >= 0 ? name.substring(name.lastIndexOf(".")+1) : null);if(e!=null&&!e.isBlank()&&e.matches("[A-Za-z0-9]{1,8}"))return "."+e.toLowerCase();return mime!=null&&mime.equals("image/png")?".png":".jpg";} private static void createThumb(Path original,Path thumb)throws IOException{BufferedImage src=ImageIO.read(original.toFile());if(src==null)throw new IOException("invalid image");int w=Math.min(800,src.getWidth()),h=Math.max(1,(int)((double)src.getHeight()*w/src.getWidth()));BufferedImage out=new BufferedImage(w,h,BufferedImage.TYPE_INT_RGB);Graphics2D g=out.createGraphics();g.drawImage(src,0,0,w,h,null);g.dispose();ImageIO.write(out,"jpg",thumb.toFile());}}
+
+import com.travel.auth.*;
+import com.travel.place.*;
+import java.awt.Graphics2D;
+import java.awt.image.BufferedImage;
+import java.io.*;
+import java.nio.file.*;
+import java.util.*;
+import javax.imageio.ImageIO;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.*;
+import org.springframework.http.*;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
+
+@RestController
+@RequestMapping("/api/media")
+public class MediaController {
+  static final long MAX = 20L * 1024 * 1024;
+  final MediaRepository media;
+  final PlaceRepository places;
+  final UserRepository users;
+  final Path root;
+
+  public MediaController(
+      MediaRepository m,
+      PlaceRepository p,
+      UserRepository u,
+      @Value("${app.upload-dir:uploads}") String dir) {
+    media = m;
+    places = p;
+    users = u;
+    root = Paths.get(dir).toAbsolutePath().normalize();
+  }
+
+  @GetMapping
+  public List<MediaView> list(
+      @AuthenticationPrincipal AccountPrincipal principal, @RequestParam Long placeId) {
+    places
+        .findByIdAndUserId(placeId, principal.id())
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "景点不存在"));
+    return media.findByPlaceIdAndUserIdOrderBySortOrderAsc(placeId, principal.id()).stream()
+        .map(MediaView::from)
+        .toList();
+  }
+
+  @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  @ResponseStatus(HttpStatus.CREATED)
+  @Transactional
+  public MediaView upload(
+      @AuthenticationPrincipal AccountPrincipal principal,
+      @RequestParam MultipartFile file,
+      @RequestParam Long placeId) {
+    if (file.isEmpty() || file.getSize() > MAX)
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "图片不能为空且不能超过 20MB");
+    if (!Objects.requireNonNullElse(file.getContentType(), "").startsWith("image/"))
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "只支持图片文件");
+    var user = users.findById(principal.id()).orElseThrow();
+    var place =
+        places
+            .findByIdAndUserId(placeId, principal.id())
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "景点不存在"));
+    if (media.countByPlaceIdAndUserId(placeId, principal.id()) >= 10)
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "单个景点最多上传 10 张图片");
+    String ext = extension(file.getOriginalFilename(), file.getContentType());
+    Path dir =
+        root.resolve(String.valueOf(principal.id()))
+            .resolve("place")
+            .resolve(String.valueOf(placeId));
+    try {
+      Files.createDirectories(dir);
+      String base = UUID.randomUUID().toString();
+      Path original = dir.resolve(base + ext), thumb = dir.resolve(base + "_thumb.jpg");
+      file.transferTo(original);
+      createThumb(original, thumb);
+      Media m = new Media(user, place);
+      m.originalPath = original.toString();
+      m.thumbnailPath = thumb.toString();
+      m.originalFilename =
+          StringUtils.cleanPath(Objects.requireNonNullElse(file.getOriginalFilename(), base + ext));
+      m.mimeType = file.getContentType();
+      m.sizeBytes = file.getSize();
+      m.sortOrder = (int) media.countByPlaceIdAndUserId(placeId, principal.id());
+      return MediaView.from(media.save(m));
+    } catch (IOException e) {
+      throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "图片保存失败", e);
+    }
+  }
+
+  @GetMapping("/{id}/original")
+  public ResponseEntity<Resource> original(
+      @PathVariable Long id, @AuthenticationPrincipal AccountPrincipal p) {
+    return file(id, p, false);
+  }
+
+  @GetMapping("/{id}/thumbnail")
+  public ResponseEntity<Resource> thumb(
+      @PathVariable Long id, @AuthenticationPrincipal AccountPrincipal p) {
+    return file(id, p, true);
+  }
+
+  private ResponseEntity<Resource> file(Long id, AccountPrincipal p, boolean thumbnail) {
+    Media m =
+        media
+            .findByIdAndUserId(id, p.id())
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "图片不存在"));
+    Path path = Paths.get(thumbnail ? m.thumbnailPath : m.originalPath);
+    Resource r = new FileSystemResource(path);
+    if (!r.exists()) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "图片文件不存在");
+    return ResponseEntity.ok()
+        .contentType(MediaType.parseMediaType(thumbnail ? "image/jpeg" : m.mimeType))
+        .body(r);
+  }
+
+  @DeleteMapping("/{id}")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  @Transactional
+  public void delete(@PathVariable Long id, @AuthenticationPrincipal AccountPrincipal p) {
+    Media m =
+        media
+            .findByIdAndUserId(id, p.id())
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "图片不存在"));
+    try {
+      Files.deleteIfExists(Paths.get(m.originalPath));
+      Files.deleteIfExists(Paths.get(m.thumbnailPath));
+    } catch (IOException e) {
+      throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "图片删除失败", e);
+    }
+    media.delete(m);
+  }
+
+  private static String extension(String name, String mime) {
+    String e =
+        name == null
+            ? null
+            : (name.lastIndexOf(".") >= 0 ? name.substring(name.lastIndexOf(".") + 1) : null);
+    if (e != null && !e.isBlank() && e.matches("[A-Za-z0-9]{1,8}")) return "." + e.toLowerCase();
+    return mime != null && mime.equals("image/png") ? ".png" : ".jpg";
+  }
+
+  private static void createThumb(Path original, Path thumb) throws IOException {
+    BufferedImage src = ImageIO.read(original.toFile());
+    if (src == null) throw new IOException("invalid image");
+    int w = Math.min(800, src.getWidth()),
+        h = Math.max(1, (int) ((double) src.getHeight() * w / src.getWidth()));
+    BufferedImage out = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
+    Graphics2D g = out.createGraphics();
+    g.drawImage(src, 0, 0, w, h, null);
+    g.dispose();
+    ImageIO.write(out, "jpg", thumb.toFile());
+  }
+}

@@ -1,3 +1,94 @@
 package com.travel.review;
-import com.fasterxml.jackson.core.JsonProcessingException; import com.fasterxml.jackson.databind.ObjectMapper; import com.travel.auth.*; import com.travel.place.*; import jakarta.validation.Valid; import jakarta.validation.constraints.*; import java.util.*; import org.springframework.http.*; import org.springframework.security.core.annotation.AuthenticationPrincipal; import org.springframework.transaction.annotation.Transactional; import org.springframework.web.bind.annotation.*; import org.springframework.web.server.ResponseStatusException;
-@RestController @RequestMapping("/api") public class ReviewController {final ReviewRepository reviews;final ReviewVersionRepository versions;final PlaceRepository places;final UserRepository users;final ObjectMapper mapper; public ReviewController(ReviewRepository r,ReviewVersionRepository v,PlaceRepository p,UserRepository u,ObjectMapper m){reviews=r;versions=v;places=p;users=u;mapper=m;} public record Input(@Min(1) @Max(5) Integer stars,String content,String pros,String cons,@Min(1) @Max(5) Integer recommendScore,String enabledFieldsJson){} private Place ownPlace(Long id,AccountPrincipal p){return places.findByIdAndUserId(id,p.id()).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND,"景点不存在"));} @GetMapping("/places/{placeId}/review") public ReviewView get(@PathVariable Long placeId,@AuthenticationPrincipal AccountPrincipal p){ownPlace(placeId,p);return reviews.findByPlaceId(placeId).map(ReviewView::from).orElse(null);} @PutMapping("/places/{placeId}/review") @Transactional public ReviewView save(@PathVariable Long placeId,@AuthenticationPrincipal AccountPrincipal p,@Valid @RequestBody Input i){Place place=ownPlace(placeId,p);Review r=reviews.findByPlaceId(placeId).orElseGet(()->new Review(place));r.stars=i.stars();r.content=i.content();r.pros=i.pros();r.cons=i.cons();r.recommendScore=i.recommendScore();r.enabledFieldsJson=i.enabledFieldsJson();r=reviews.saveAndFlush(r);try{versions.save(new ReviewVersion(r,mapper.writeValueAsString(i),versions.countByReviewId(r.id)+1));}catch(JsonProcessingException e){throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,"评价快照生成失败",e);}return ReviewView.from(r);} @GetMapping("/reviews/{reviewId}/versions") public List<ReviewVersionView> history(@PathVariable Long reviewId,@AuthenticationPrincipal AccountPrincipal p){Review r=reviews.findById(reviewId).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND,"评价不存在"));ownPlace(r.place.getId(),p);return versions.findByReviewIdOrderByVersionNoDesc(reviewId).stream().map(ReviewVersionView::from).toList();}}
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.travel.auth.*;
+import com.travel.place.*;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.*;
+import java.util.*;
+import org.springframework.http.*;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
+
+@RestController
+@RequestMapping("/api")
+public class ReviewController {
+  final ReviewRepository reviews;
+  final ReviewVersionRepository versions;
+  final PlaceRepository places;
+  final UserRepository users;
+  final ObjectMapper mapper;
+
+  public ReviewController(
+      ReviewRepository r,
+      ReviewVersionRepository v,
+      PlaceRepository p,
+      UserRepository u,
+      ObjectMapper m) {
+    reviews = r;
+    versions = v;
+    places = p;
+    users = u;
+    mapper = m;
+  }
+
+  public record Input(
+      @Min(1) @Max(5) Integer stars,
+      String content,
+      String pros,
+      String cons,
+      @Min(1) @Max(5) Integer recommendScore,
+      String enabledFieldsJson) {}
+
+  private Place ownPlace(Long id, AccountPrincipal p) {
+    return places
+        .findByIdAndUserId(id, p.id())
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "景点不存在"));
+  }
+
+  @GetMapping("/places/{placeId}/review")
+  public ReviewView get(@PathVariable Long placeId, @AuthenticationPrincipal AccountPrincipal p) {
+    ownPlace(placeId, p);
+    return reviews.findByPlaceId(placeId).map(ReviewView::from).orElse(null);
+  }
+
+  @PutMapping("/places/{placeId}/review")
+  @Transactional
+  public ReviewView save(
+      @PathVariable Long placeId,
+      @AuthenticationPrincipal AccountPrincipal p,
+      @Valid @RequestBody Input i) {
+    Place place = ownPlace(placeId, p);
+    Review r = reviews.findByPlaceId(placeId).orElseGet(() -> new Review(place));
+    r.stars = i.stars();
+    r.content = i.content();
+    r.pros = i.pros();
+    r.cons = i.cons();
+    r.recommendScore = i.recommendScore();
+    r.enabledFieldsJson = i.enabledFieldsJson();
+    r = reviews.saveAndFlush(r);
+    try {
+      versions.save(
+          new ReviewVersion(r, mapper.writeValueAsString(i), versions.countByReviewId(r.id) + 1));
+    } catch (JsonProcessingException e) {
+      throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "评价快照生成失败", e);
+    }
+    return ReviewView.from(r);
+  }
+
+  @GetMapping("/reviews/{reviewId}/versions")
+  public List<ReviewVersionView> history(
+      @PathVariable Long reviewId, @AuthenticationPrincipal AccountPrincipal p) {
+    Review r =
+        reviews
+            .findById(reviewId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "评价不存在"));
+    ownPlace(r.place.getId(), p);
+    return versions.findByReviewIdOrderByVersionNoDesc(reviewId).stream()
+        .map(ReviewVersionView::from)
+        .toList();
+  }
+}

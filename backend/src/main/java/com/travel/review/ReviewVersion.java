@@ -1,3 +1,39 @@
 package com.travel.review;
-import jakarta.persistence.*; import java.time.Instant;
-@Entity @Table(name="review_versions",uniqueConstraints=@UniqueConstraint(name="uk_review_version",columnNames={"review_id","version_no"})) public class ReviewVersion { @Id @GeneratedValue(strategy=GenerationType.IDENTITY) Long id; @ManyToOne(fetch=FetchType.LAZY,optional=false) @JoinColumn(name="review_id") Review review; @Column(columnDefinition="TEXT",nullable=false) String snapshotJson; @Column(nullable=false) Integer versionNo; @Column(nullable=false) Instant createdAt; protected ReviewVersion(){} ReviewVersion(Review r,String json,int no){review=r;snapshotJson=json;versionNo=no;createdAt=Instant.now();} }
+
+import jakarta.persistence.*;
+import java.time.Instant;
+
+@Entity
+@Table(
+    name = "review_versions",
+    uniqueConstraints =
+        @UniqueConstraint(
+            name = "uk_review_version",
+            columnNames = {"review_id", "version_no"}))
+public class ReviewVersion {
+  @Id
+  @GeneratedValue(strategy = GenerationType.IDENTITY)
+  Long id;
+
+  @ManyToOne(fetch = FetchType.LAZY, optional = false)
+  @JoinColumn(name = "review_id")
+  Review review;
+
+  @Column(columnDefinition = "TEXT", nullable = false)
+  String snapshotJson;
+
+  @Column(nullable = false)
+  Integer versionNo;
+
+  @Column(nullable = false)
+  Instant createdAt;
+
+  protected ReviewVersion() {}
+
+  ReviewVersion(Review r, String json, int no) {
+    review = r;
+    snapshotJson = json;
+    versionNo = no;
+    createdAt = Instant.now();
+  }
+}

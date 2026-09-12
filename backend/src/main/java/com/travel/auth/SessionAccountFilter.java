@@ -13,8 +13,10 @@ public class SessionAccountFilter extends OncePerRequestFilter {
   private final UserRepository users;
   public SessionAccountFilter(UserRepository users) { this.users = users; }
 
-  @Override protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
-      FilterChain chain) throws ServletException, IOException {
+  @Override
+  protected void doFilterInternal(
+      HttpServletRequest request, HttpServletResponse response, FilterChain chain)
+      throws ServletException, IOException {
     var auth = SecurityContextHolder.getContext().getAuthentication();
     if (auth != null && auth.getPrincipal() instanceof AccountPrincipal principal) {
       var account = users.findById(principal.id());

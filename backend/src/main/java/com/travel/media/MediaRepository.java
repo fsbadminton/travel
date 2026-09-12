@@ -1,1 +1,12 @@
-package com.travel.media; import java.util.*; import org.springframework.data.jpa.repository.JpaRepository; public interface MediaRepository extends JpaRepository<Media,Long>{long countByPlaceIdAndUserId(Long placeId,Long userId);Optional<Media> findByIdAndUserId(Long id,Long userId);}
+package com.travel.media;
+
+import java.util.*;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface MediaRepository extends JpaRepository<Media, Long> {
+  long countByPlaceIdAndUserId(Long placeId, Long userId);
+
+  Optional<Media> findByIdAndUserId(Long id, Long userId);
+
+  List<Media> findByPlaceIdAndUserIdOrderBySortOrderAsc(Long placeId, Long userId);
+}

@@ -1,1 +1,10 @@
-package com.travel.food; import java.util.*; import org.springframework.data.jpa.repository.JpaRepository; public interface FoodRepository extends JpaRepository<Food,Long>{List<Food> findByUserIdAndStatusOrderByIdDesc(Long userId,String status); Optional<Food> findByIdAndUserId(Long id,Long userId);}
+package com.travel.food;
+
+import java.util.*;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface FoodRepository extends JpaRepository<Food, Long> {
+  List<Food> findByUserIdAndStatusOrderByIdDesc(Long userId, String status);
+
+  Optional<Food> findByIdAndUserId(Long id, Long userId);
+}

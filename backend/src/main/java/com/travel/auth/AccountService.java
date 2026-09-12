@@ -28,7 +28,8 @@ public class AccountService {
     if (users.findByUsername(normalized).isPresent()) {
       throw new ResponseStatusException(HttpStatus.CONFLICT, "用户名已存在");
     }
-    return UserView.from(users.saveAndFlush(new UserAccount(normalized, passwords.encode(password), "user")));
+    return UserView.from(
+        users.saveAndFlush(new UserAccount(normalized, passwords.encode(password), "user")));
   }
 
   public AccountPrincipal login(String username, String password) {
@@ -41,15 +42,18 @@ public class AccountService {
   }
 
   public UserView current(AccountPrincipal principal) {
-    return UserView.from(users.findById(principal.id()).orElseThrow(
-        () -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "请重新登录")));
+    return UserView.from(
+        users
+            .findById(principal.id())
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "请重新登录")));
   }
 
   @Transactional
   public void changePassword(AccountPrincipal principal, String oldPassword, String newPassword) {
     validatePassword(newPassword);
     UserAccount user = users.findForUpdateById(principal.id()).orElseThrow();
-    if (user.sessionVersion != principal.sessionVersion() || !passwords.matches(oldPassword, user.passwordHash)) {
+    if (user.sessionVersion != principal.sessionVersion()
+        || !passwords.matches(oldPassword, user.passwordHash)) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "当前密码不正确");
     }
     user.passwordHash = passwords.encode(newPassword);
@@ -57,7 +61,9 @@ public class AccountService {
   }
 
   public List<UserView> listUsers() {
-    return users.findAll(org.springframework.data.domain.Sort.by("id")).stream().map(UserView::from).toList();
+    return users.findAll(org.springframework.data.domain.Sort.by("id")).stream()
+        .map(UserView::from)
+        .toList();
   }
 
   @Transactional
@@ -65,12 +71,17 @@ public class AccountService {
     if (!List.of("active", "disabled").contains(status)) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "账号状态无效");
     }
-    UserAccount user = users.findForUpdateById(id).orElseThrow(
-        () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "用户不存在"));
+    UserAccount user =
+        users
+            .findForUpdateById(id)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "用户不存在"));
     if ("admin".equals(user.role)) {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "不能停用管理员账号");
     }
-    if (!user.status.equals(status)) { user.status = status; user.sessionVersion++; }
+    if (!user.status.equals(status)) {
+      user.status = status;
+      user.sessionVersion++;
+    }
     return UserView.from(user);
   }
 
@@ -95,7 +106,9 @@ public class AccountService {
   }
 
   static void validatePassword(String password) {
-    if (password == null || password.length() < 8 || password.getBytes(StandardCharsets.UTF_8).length > 72) {
+    if (password == null
+        || password.length() < 8
+        || password.getBytes(StandardCharsets.UTF_8).length > 72) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "密码至少 8 位，UTF-8 编码不能超过 72 字节");
     }
   }

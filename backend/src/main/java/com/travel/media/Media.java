@@ -1,3 +1,55 @@
 package com.travel.media;
-import com.travel.auth.UserAccount; import com.travel.place.Place; import jakarta.persistence.*; import java.time.Instant;
-@Entity @Table(name="media") public class Media { @Id @GeneratedValue(strategy=GenerationType.IDENTITY) Long id; @ManyToOne(fetch=FetchType.LAZY,optional=false) @JoinColumn(name="user_id") UserAccount user; @ManyToOne(fetch=FetchType.LAZY) @JoinColumn(name="place_id") Place place; @Column(name="original_path",nullable=false) String originalPath; @Column(name="thumbnail_path",nullable=false) String thumbnailPath; @Column(name="original_filename",nullable=false) String originalFilename; @Column(name="mime_type",nullable=false) String mimeType; @Column(name="size_bytes",nullable=false) long sizeBytes; @Column(name="sort_order",nullable=false) int sortOrder; @Column(nullable=false) Instant createdAt; protected Media(){} Media(UserAccount u,Place p){user=u;place=p;} @PrePersist void created(){createdAt=Instant.now();} }
+
+import com.travel.auth.UserAccount;
+import com.travel.place.Place;
+import jakarta.persistence.*;
+import java.time.Instant;
+
+@Entity
+@Table(name = "media")
+public class Media {
+  @Id
+  @GeneratedValue(strategy = GenerationType.IDENTITY)
+  Long id;
+
+  @ManyToOne(fetch = FetchType.LAZY, optional = false)
+  @JoinColumn(name = "user_id")
+  UserAccount user;
+
+  @ManyToOne(fetch = FetchType.LAZY)
+  @JoinColumn(name = "place_id")
+  Place place;
+
+  @Column(name = "original_path", nullable = false)
+  String originalPath;
+
+  @Column(name = "thumbnail_path", nullable = false)
+  String thumbnailPath;
+
+  @Column(name = "original_filename", nullable = false)
+  String originalFilename;
+
+  @Column(name = "mime_type", nullable = false)
+  String mimeType;
+
+  @Column(name = "size_bytes", nullable = false)
+  long sizeBytes;
+
+  @Column(name = "sort_order", nullable = false)
+  int sortOrder;
+
+  @Column(nullable = false)
+  Instant createdAt;
+
+  protected Media() {}
+
+  Media(UserAccount u, Place p) {
+    user = u;
+    place = p;
+  }
+
+  @PrePersist
+  void created() {
+    createdAt = Instant.now();
+  }
+}
